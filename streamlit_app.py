@@ -10,7 +10,7 @@ import os
 
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, accuracy_score
 
 ##setup
 st.sidebar.title("Citi Bike Dashboard 🚲")
@@ -160,40 +160,33 @@ if page == "Introduction":
     """)
 
 
-
+## Page 2
 elif page == "Visualization":
     st.subheader("02 Data Visualization")
 
 
     filtered_df = final_df[final_df['gender'].isin([1, 2])].copy()
 
-    # Bar plot: average birth year by usertype and gender
-    st.subheader("Average Birth Year by Usertype and Gender")
+
+    df = final_df.copy()
+    df = df[df['gender'].isin([1, 2])]  # Filter out unknown gender
+    df['gender_label'] = df['gender'].map({1: 'Male', 2: 'Female'})
+
+    # Optional: limit extreme trip durations to improve readability
+    df = df[df['tripduration'] <= 3600]  # Keep trips under 1 hour
+
+    # Plot
+    st.subheader("1️⃣ Trip Duration by Gender (Boxplot)")
+
     fig, ax = plt.subplots(figsize=(8, 5))
-    sns.barplot(data=filtered_df, x='usertype', y='birth year', hue='gender', ci=None, ax=ax)
-    ax.set_title("Younger or Older: Birth Year Trends")
-    ax.set_ylabel("Average Birth Year")
-    ax.set_xlabel("User Type")
-    ax.legend(title="Gender (1 = Male, 2 = Female)")
-    st.pyplot(fig)
-
-    st.subheader("Birth Year Distribution by Usertype")
-    fig, ax = plt.subplots()
-    sns.boxplot(data=filtered_df, x='usertype', y='birth year', ax=ax)
-    st.pyplot(fig)
-
-    st.subheader("User Type Distribution by Gender")
-    fig, ax = plt.subplots()
-    sns.countplot(data=filtered_df, x='gender', hue='usertype', ax=ax)
-    ax.set_title("Usertype Breakdown by Gender")
-    ax.set_xlabel("Gender (1 = Male, 2 = Female)")
+    sns.boxplot(data=df, x='gender_label', y='tripduration', ax=ax)
+    ax.set_title("Distribution of Trip Durations by Gender")
+    ax.set_ylabel("Trip Duration (seconds)")
+    ax.set_xlabel("Gender")
     st.pyplot(fig)
 
 
-
-
-
-    st.subheader("Average Trip Duration by Gender and Usertype")
+    st.subheader("2️⃣ Average Trip Duration by Gender and Usertype")
 
     # Group by gender and usertype
     avg_duration = filtered_df.groupby(['gender', 'usertype'])['tripduration'].mean().reset_index()
@@ -208,7 +201,7 @@ elif page == "Visualization":
     st.pyplot(fig)
 
 
-    st.subheader("Trip Frequency by Gender and Usertype")
+    st.subheader("3️⃣ Trip Frequency by Gender and Usertype")
 
     trip_counts = filtered_df.groupby(['gender', 'usertype']).size().reset_index(name='trip_count')
 
@@ -223,50 +216,29 @@ elif page == "Visualization":
 
 
 
-    st.subheader("Birth Year Density by Usertype (Violin Plot)")
+    st.subheader("4️⃣ Birth Year Density by Usertype (Violin Plot)")
 
-    # Optional: Filter out extreme outliers
+    # Remove outliers
     violin_df = final_df[(final_df['birth year'] > 1920) & (final_df['birth year'] < 2010)]
 
     # Remove unknowns
     violin_df = violin_df[violin_df['usertype'].notna() & violin_df['birth year'].notna()]
 
-    # Plot violin
     fig, ax = plt.subplots(figsize=(8, 5))
     sns.violinplot(data=violin_df, x='usertype', y='birth year', ax=ax)
     ax.set_title("Density of Birth Years by Usertype")
     st.pyplot(fig)
 
-    st.subheader("Trip Duration vs Age")
 
-    # Calculate age (assuming data is from 2020)
-    age_df = final_df.copy()
-    age_df = age_df.dropna(subset=['birth year', 'tripduration'])
-    age_df['age'] = 2020 - age_df['birth year']
+    st.subheader("5️⃣ Time of Day Usage by Age Group")
 
-    # Optional: filter out extreme ages
-    age_df = age_df[(age_df['age'] >= 16) & (age_df['age'] <= 80)]
-
-    # Plot scatter with regression line
-    fig, ax = plt.subplots(figsize=(8, 5))
-    sns.scatterplot(data=age_df.sample(1000), x='age', y='tripduration', alpha=0.3, hue='usertype', ax=ax)
-    sns.regplot(data=age_df, x='age', y='tripduration', scatter=False, ax=ax, color='black')
-    ax.set_title("Trip Duration by Age (with Trend Line)")
-    ax.set_ylabel("Trip Duration (seconds)")
-    st.pyplot(fig)
-
-    st.subheader("Time of Day Usage by Age Group")
-
-    # Preprocessing
     time_df = final_df.copy()
     time_df = time_df.dropna(subset=['birth year', 'starttime'])
     time_df['age'] = 2020 - time_df['birth year']
     time_df['age_group'] = pd.cut(time_df['age'], bins=[15, 25, 35, 50, 65, 100], labels=['16–25', '26–35', '36–50', '51–65', '66+'])
 
-    # Convert starttime to hour
     time_df['hour'] = pd.to_datetime(time_df['starttime']).dt.hour
 
-    # Plot
     fig, ax = plt.subplots(figsize=(10, 5))
     sns.histplot(data=time_df, x='hour', hue='age_group', multiple='stack', bins=24)
     ax.set_title("Ride Start Time by Age Group")
@@ -274,53 +246,78 @@ elif page == "Visualization":
     st.pyplot(fig)
 
 
+
+## Page 3
 elif page == "Model Prediction":
     from sklearn.linear_model import LogisticRegression
     from sklearn.preprocessing import LabelEncoder
 
-    # Clean and prepare the data
+    st.subheader("03 Model Prediction")
+
+    #Linear Regression Model
+
+    df = final_df.copy()
+    df = df[df['gender'].isin([1, 2])]
+    df = df.dropna(subset=['birth year', 'tripduration', 'usertype'])
+    df['age'] = 2020 - df['birth year']
+    df = df[(df['age'] >= 15) & (df['age'] <= 90)]
+
+    df['usertype_encoded'] = df['usertype'].map({'Customer': 0, 'Subscriber': 1})
+
+    X = df[['age', 'gender', 'tripduration']]
+    y = df['usertype_encoded']
+
+    model = LinearRegression()
+    model.fit(X, y)
+    y_pred = model.predict(X)
+
+    mae = mean_absolute_error(y, y_pred)
+    y_pred_class = (y_pred >= 0.5).astype(int)
+    accuracy = accuracy_score(y, y_pred_class)
+
+    st.subheader("1️⃣ Linear Regression Model Evaluation")
+    st.markdown(f"- **Mean Absolute Error (MAE)**: `{mae:.4f}`")
+    st.markdown(f"- **Classification Accuracy (threshold @ 0.5)**: `{accuracy * 100:.2f}%`")
+
+    #Logistic Regression
+
     df = final_df.copy()
     df = df[df['gender'].isin([1, 2])]
     df['age'] = 2020 - df['birth year']
     df = df[(df['age'] > 10) & (df['age'] < 90)]
     df = df.dropna(subset=['tripduration'])
 
-    # Encode target variable
     df['usertype_encoded'] = LabelEncoder().fit_transform(df['usertype'])  # Subscriber=1, Customer=0
 
-    # Features and target
     X = df[['age', 'gender', 'tripduration']]
     y = df['usertype_encoded']
 
-    # Train/test split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # Train model
     model = LogisticRegression()
     model.fit(X_train, y_train)
 
-    st.subheader("🔮 Predict Usertype Based on Rider Info")
+    st.markdown("### 2️⃣ Predicted Usertype Based on User Info")
 
-# Interactive inputs
-age_input = st.slider("Select rider's age:", min_value=15, max_value=90, value=30)
-gender_input = st.selectbox("Select rider's gender:", options=["Male", "Female"])
-trip_duration_input = st.slider("Estimated trip duration (in seconds):", min_value=60, max_value=7200, value=900)
+    #User Interaction
+    age_input = st.slider("Select rider's age:", min_value=15, max_value=90, value=30)
+    gender_input = st.selectbox("Select rider's gender:", options=["Male", "Female"])
+    trip_duration_input = st.slider("Estimated trip duration (in seconds):", min_value=60, max_value=7200, value=900)
 
-# Convert inputs to model-ready format
-gender_code = 1 if gender_input == "Male" else 2
-input_df = pd.DataFrame([[age_input, gender_code, trip_duration_input]], columns=['age', 'gender', 'tripduration'])
+    gender_code = 1 if gender_input == "Male" else 2
+    input_df = pd.DataFrame([[age_input, gender_code, trip_duration_input]], columns=['age', 'gender', 'tripduration'])
 
-# Make prediction
-prediction = model.predict(input_df)[0]
-proba = model.predict_proba(input_df)[0]
+    prediction = model.predict(input_df)[0]
+    proba = model.predict_proba(input_df)[0]
 
-# Decode prediction
-usertype_label = "Subscriber" if prediction == 1 else "Customer"
+    usertype_label = "Subscriber" if prediction == 1 else "Customer"
 
-# Display result
-st.markdown(f"### 🧾 Predicted Usertype: **{usertype_label}**")
-st.markdown(f"- Probability of being a Subscriber: **{proba[1]*100:.2f}%**")
-st.markdown(f"- Probability of being a Customer: **{proba[0]*100:.2f}%**")
+    st.markdown(f"### 🚲 Predicted Usertype: **{usertype_label}**")
+    st.markdown(f"- Probability of being a Subscriber: **{proba[1]*100:.2f}%**")
+    st.markdown(f"- Probability of being a Customer: **{proba[0]*100:.2f}%**")
+
+
+    
 
 
 
