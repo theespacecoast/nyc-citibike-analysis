@@ -40,9 +40,9 @@ final_df = pd.concat(all_data, ignore_index=True)
 if page == "Introduction":
     st.subheader("01 Introduction")
     st.markdown("""
-    Welcome to the Citi Bike Explorer 🚲\n
-    This dashboard uses data from 2020. (Citi Bike does not provide demographics of their users for more recent years)\n
-    We'll explore riding trends through visual analysis and predict usertype based on age, gender, and biking habits.
+    Welcome to the Citi Bike Explorer Page 🚲\n
+    We will explore riding trends through thorough visual analysis and attempt to predict usertype based on age, gender, biking hours, and so much more. In other words, we will try to look for correlations between membership with other user demographics. \n
+    This dashboard uses data from 2020. While Citi Bike does present data as recent to 2025 May, they do not provide specific user demographics such as gender and age, which is why we used the dataset from 2020.\n
     """)
 
     # Preview
@@ -81,6 +81,10 @@ if page == "Introduction":
     #Summary Statistics
     st.markdown("##### 📖 Summary Statistics")
     st.dataframe(final_df.describe())
+
+    st.markdown("""
+    Before we go on to the Visualization page, we want to share the results of two brief graphs that allowed us to decide on the trajectory of our visualization.
+    """)
 
     #Display age, gender
     current_year = 2020  
@@ -149,117 +153,174 @@ if page == "Introduction":
 
  # analysis
     st.markdown("##### 📝 Analysis")
+    st.markdown("""
+    1️⃣ **Subscribers outnumber short-term (guest) customers**, indicating stronger engagement from long-term users.\n 
+    2️⃣ **Male riders are more active than female riders** across both user types.\n 
+    3️⃣ **Gender distribution is more balanced among guest customers**, while subscribers are predominantly male.
+    """)
+
+
+
+elif page == "Visualization":
+    st.subheader("02 Data Visualization")
+
+
+    filtered_df = final_df[final_df['gender'].isin([1, 2])].copy()
+
+    # Bar plot: average birth year by usertype and gender
+    st.subheader("Average Birth Year by Usertype and Gender")
+    fig, ax = plt.subplots(figsize=(8, 5))
+    sns.barplot(data=filtered_df, x='usertype', y='birth year', hue='gender', ci=None, ax=ax)
+    ax.set_title("Younger or Older: Birth Year Trends")
+    ax.set_ylabel("Average Birth Year")
+    ax.set_xlabel("User Type")
+    ax.legend(title="Gender (1 = Male, 2 = Female)")
+    st.pyplot(fig)
+
+    st.subheader("Birth Year Distribution by Usertype")
+    fig, ax = plt.subplots()
+    sns.boxplot(data=filtered_df, x='usertype', y='birth year', ax=ax)
+    st.pyplot(fig)
+
+    st.subheader("User Type Distribution by Gender")
+    fig, ax = plt.subplots()
+    sns.countplot(data=filtered_df, x='gender', hue='usertype', ax=ax)
+    ax.set_title("Usertype Breakdown by Gender")
+    ax.set_xlabel("Gender (1 = Male, 2 = Female)")
+    st.pyplot(fig)
 
 
 
 
 
-# Bar plot: average birth year by usertype and gender
-st.subheader("Average Birth Year by Usertype and Gender")
-fig, ax = plt.subplots(figsize=(8, 5))
-sns.barplot(data=filtered_df, x='usertype', y='birth year', hue='gender', ci=None, ax=ax)
-ax.set_title("Younger or Older: Birth Year Trends")
-ax.set_ylabel("Average Birth Year")
-ax.set_xlabel("User Type")
-ax.legend(title="Gender (1 = Male, 2 = Female)")
-st.pyplot(fig)
+    st.subheader("Average Trip Duration by Gender and Usertype")
 
-st.subheader("Birth Year Distribution by Usertype")
-fig, ax = plt.subplots()
-sns.boxplot(data=filtered_df, x='usertype', y='birth year', ax=ax)
-st.pyplot(fig)
+    # Group by gender and usertype
+    avg_duration = filtered_df.groupby(['gender', 'usertype'])['tripduration'].mean().reset_index()
 
-st.subheader("User Type Distribution by Gender")
-fig, ax = plt.subplots()
-sns.countplot(data=filtered_df, x='gender', hue='usertype', ax=ax)
-ax.set_title("Usertype Breakdown by Gender")
-ax.set_xlabel("Gender (1 = Male, 2 = Female)")
-st.pyplot(fig)
+    # Plot
+    fig, ax = plt.subplots()
+    sns.barplot(data=avg_duration, x='gender', y='tripduration', hue='usertype', ax=ax)
+
+    ax.set_xticklabels(['Male (1)', 'Female (2)'])
+    ax.set_ylabel("Average Trip Duration (seconds)")
+    ax.set_title("Trip Duration Trends by Gender and Usertype")
+    st.pyplot(fig)
 
 
+    st.subheader("Trip Frequency by Gender and Usertype")
 
+    trip_counts = filtered_df.groupby(['gender', 'usertype']).size().reset_index(name='trip_count')
 
+    # Plot
+    fig, ax = plt.subplots()
+    sns.barplot(data=trip_counts, x='gender', y='trip_count', hue='usertype', ax=ax)
 
-st.subheader("Average Trip Duration by Gender and Usertype")
-
-# Group by gender and usertype
-avg_duration = filtered_df.groupby(['gender', 'usertype'])['tripduration'].mean().reset_index()
-
-# Plot
-fig, ax = plt.subplots()
-sns.barplot(data=avg_duration, x='gender', y='tripduration', hue='usertype', ax=ax)
-
-ax.set_xticklabels(['Male (1)', 'Female (2)'])
-ax.set_ylabel("Average Trip Duration (seconds)")
-ax.set_title("Trip Duration Trends by Gender and Usertype")
-st.pyplot(fig)
-
-
-st.subheader("Trip Frequency by Gender and Usertype")
-
-trip_counts = filtered_df.groupby(['gender', 'usertype']).size().reset_index(name='trip_count')
-
-# Plot
-fig, ax = plt.subplots()
-sns.barplot(data=trip_counts, x='gender', y='trip_count', hue='usertype', ax=ax)
-
-ax.set_xticklabels(['Male (1)', 'Female (2)'])
-ax.set_ylabel("Number of Trips")
-ax.set_title("How Often Do Different Groups Ride?")
-st.pyplot(fig)
+    ax.set_xticklabels(['Male (1)', 'Female (2)'])
+    ax.set_ylabel("Number of Trips")
+    ax.set_title("How Often Do Different Groups Ride?")
+    st.pyplot(fig)
 
 
 
-st.subheader("Birth Year Density by Usertype (Violin Plot)")
+    st.subheader("Birth Year Density by Usertype (Violin Plot)")
 
-# Optional: Filter out extreme outliers
-violin_df = final_df[(final_df['birth year'] > 1920) & (final_df['birth year'] < 2010)]
+    # Optional: Filter out extreme outliers
+    violin_df = final_df[(final_df['birth year'] > 1920) & (final_df['birth year'] < 2010)]
 
-# Remove unknowns
-violin_df = violin_df[violin_df['usertype'].notna() & violin_df['birth year'].notna()]
+    # Remove unknowns
+    violin_df = violin_df[violin_df['usertype'].notna() & violin_df['birth year'].notna()]
 
-# Plot violin
-fig, ax = plt.subplots(figsize=(8, 5))
-sns.violinplot(data=violin_df, x='usertype', y='birth year', ax=ax)
-ax.set_title("Density of Birth Years by Usertype")
-st.pyplot(fig)
+    # Plot violin
+    fig, ax = plt.subplots(figsize=(8, 5))
+    sns.violinplot(data=violin_df, x='usertype', y='birth year', ax=ax)
+    ax.set_title("Density of Birth Years by Usertype")
+    st.pyplot(fig)
 
-st.subheader("Trip Duration vs Age")
+    st.subheader("Trip Duration vs Age")
 
-# Calculate age (assuming data is from 2020)
-age_df = final_df.copy()
-age_df = age_df.dropna(subset=['birth year', 'tripduration'])
-age_df['age'] = 2020 - age_df['birth year']
+    # Calculate age (assuming data is from 2020)
+    age_df = final_df.copy()
+    age_df = age_df.dropna(subset=['birth year', 'tripduration'])
+    age_df['age'] = 2020 - age_df['birth year']
 
-# Optional: filter out extreme ages
-age_df = age_df[(age_df['age'] >= 16) & (age_df['age'] <= 80)]
+    # Optional: filter out extreme ages
+    age_df = age_df[(age_df['age'] >= 16) & (age_df['age'] <= 80)]
 
-# Plot scatter with regression line
-fig, ax = plt.subplots(figsize=(8, 5))
-sns.scatterplot(data=age_df.sample(1000), x='age', y='tripduration', alpha=0.3, hue='usertype', ax=ax)
-sns.regplot(data=age_df, x='age', y='tripduration', scatter=False, ax=ax, color='black')
-ax.set_title("Trip Duration by Age (with Trend Line)")
-ax.set_ylabel("Trip Duration (seconds)")
-st.pyplot(fig)
+    # Plot scatter with regression line
+    fig, ax = plt.subplots(figsize=(8, 5))
+    sns.scatterplot(data=age_df.sample(1000), x='age', y='tripduration', alpha=0.3, hue='usertype', ax=ax)
+    sns.regplot(data=age_df, x='age', y='tripduration', scatter=False, ax=ax, color='black')
+    ax.set_title("Trip Duration by Age (with Trend Line)")
+    ax.set_ylabel("Trip Duration (seconds)")
+    st.pyplot(fig)
 
-st.subheader("Time of Day Usage by Age Group")
+    st.subheader("Time of Day Usage by Age Group")
 
-# Preprocessing
-time_df = final_df.copy()
-time_df = time_df.dropna(subset=['birth year', 'starttime'])
-time_df['age'] = 2020 - time_df['birth year']
-time_df['age_group'] = pd.cut(time_df['age'], bins=[15, 25, 35, 50, 65, 100], labels=['16–25', '26–35', '36–50', '51–65', '66+'])
+    # Preprocessing
+    time_df = final_df.copy()
+    time_df = time_df.dropna(subset=['birth year', 'starttime'])
+    time_df['age'] = 2020 - time_df['birth year']
+    time_df['age_group'] = pd.cut(time_df['age'], bins=[15, 25, 35, 50, 65, 100], labels=['16–25', '26–35', '36–50', '51–65', '66+'])
 
-# Convert starttime to hour
-time_df['hour'] = pd.to_datetime(time_df['starttime']).dt.hour
+    # Convert starttime to hour
+    time_df['hour'] = pd.to_datetime(time_df['starttime']).dt.hour
 
-# Plot
-fig, ax = plt.subplots(figsize=(10, 5))
-sns.histplot(data=time_df, x='hour', hue='age_group', multiple='stack', bins=24)
-ax.set_title("Ride Start Time by Age Group")
-ax.set_xlabel("Hour of Day")
-st.pyplot(fig)
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.histplot(data=time_df, x='hour', hue='age_group', multiple='stack', bins=24)
+    ax.set_title("Ride Start Time by Age Group")
+    ax.set_xlabel("Hour of Day")
+    st.pyplot(fig)
 
+
+elif page == "Model Prediction":
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.preprocessing import LabelEncoder
+
+    # Clean and prepare the data
+    df = final_df.copy()
+    df = df[df['gender'].isin([1, 2])]
+    df['age'] = 2020 - df['birth year']
+    df = df[(df['age'] > 10) & (df['age'] < 90)]
+    df = df.dropna(subset=['tripduration'])
+
+    # Encode target variable
+    df['usertype_encoded'] = LabelEncoder().fit_transform(df['usertype'])  # Subscriber=1, Customer=0
+
+    # Features and target
+    X = df[['age', 'gender', 'tripduration']]
+    y = df['usertype_encoded']
+
+    # Train/test split
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Train model
+    model = LogisticRegression()
+    model.fit(X_train, y_train)
+
+    st.subheader("🔮 Predict Usertype Based on Rider Info")
+
+# Interactive inputs
+age_input = st.slider("Select rider's age:", min_value=15, max_value=90, value=30)
+gender_input = st.selectbox("Select rider's gender:", options=["Male", "Female"])
+trip_duration_input = st.slider("Estimated trip duration (in seconds):", min_value=60, max_value=7200, value=900)
+
+# Convert inputs to model-ready format
+gender_code = 1 if gender_input == "Male" else 2
+input_df = pd.DataFrame([[age_input, gender_code, trip_duration_input]], columns=['age', 'gender', 'tripduration'])
+
+# Make prediction
+prediction = model.predict(input_df)[0]
+proba = model.predict_proba(input_df)[0]
+
+# Decode prediction
+usertype_label = "Subscriber" if prediction == 1 else "Customer"
+
+# Display result
+st.markdown(f"### 🧾 Predicted Usertype: **{usertype_label}**")
+st.markdown(f"- Probability of being a Subscriber: **{proba[1]*100:.2f}%**")
+st.markdown(f"- Probability of being a Customer: **{proba[0]*100:.2f}%**")
 
 
 
