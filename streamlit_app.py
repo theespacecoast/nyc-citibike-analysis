@@ -171,8 +171,6 @@ elif page == "Visualization":
     df = final_df.copy()
     df = df[df['gender'].isin([1, 2])]  # Filter out unknown gender
     df['gender_label'] = df['gender'].map({1: 'Male', 2: 'Female'})
-
-    # Optional: limit extreme trip durations to improve readability
     df = df[df['tripduration'] <= 3600]  # Keep trips under 1 hour
 
     # Plot
