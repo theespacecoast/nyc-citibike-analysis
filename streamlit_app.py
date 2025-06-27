@@ -7,16 +7,43 @@ import numpy as np
 import random
 from PIL import Image
 import os
+import mlflow
+import mlflow.sklearn
+from mlflow.tracking import MlflowClient
+from sklearn.preprocessing import LabelEncoder
 
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, accuracy_score
+
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.metrics import (mean_squared_error, mean_absolute_error, r2_score, 
+                           accuracy_score, precision_score, recall_score, f1_score,
+                           confusion_matrix, ConfusionMatrixDisplay, classification_report)
+from sklearn.preprocessing import LabelEncoder
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 
 ##setup
 st.sidebar.title("Citi Bike Dashboard 🚲")
-page = st.sidebar.selectbox("Select Page", ["Introduction", "Visualization", "Model Prediction"])  # Add "Automated Report 📑" if using ydata_profiling
+page = st.sidebar.selectbox("Select Page", ["Introduction", "Visualization", "Model Prediction", "Model Tuning"])  
 image_citibike = Image.open('images/citibike.png')
 st.image(image_citibike, width=300)
+
+def setup_mlflow():
+    """Setup MLflow tracking with DagsHub"""
+    # DagsHub MLflow configuration
+    mlflow.set_tracking_uri("https://dagshub.com/theespacecoast/citibike-analysis.mlflow")
+    
+    # Set your DagsHub credentials (you'll need to get these from DagsHub)
+    # Option 1: Set environment variables (recommended)
+    os.environ['MLFLOW_TRACKING_USERNAME'] = 'theespacecoast'
+    os.environ['MLFLOW_TRACKING_PASSWORD'] = '1c2b065865ef1c52c9425efe3c8dbd2985588893'
+
+    
+    # Option 2: Direct authentication (less secure)
+    # mlflow.set_tracking_uri("https://theespacecoast:your_token@dagshub.com/theespacecoast/citibike-analysis.mlflow")
+    
+    # Set experiment name
+    mlflow.set_experiment("citibike-user-prediction")
 
 ## Upload all data
 root_folder = "CitiBike_Trip_Data"
@@ -246,10 +273,11 @@ elif page == "Visualization":
 
 
 ## Page 3
+## Page 3
 elif page == "Model Prediction":
     from sklearn.linear_model import LogisticRegression
     from sklearn.preprocessing import LabelEncoder
-
+    
     st.subheader("03 Model Prediction")
 
     #Linear Regression Model
@@ -314,9 +342,419 @@ elif page == "Model Prediction":
     st.markdown(f"- Probability of being a Subscriber: **{proba[1]*100:.2f}%**")
     st.markdown(f"- Probability of being a Customer: **{proba[0]*100:.2f}%**")
 
-
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.ensemble import RandomForestClassifier
     
+    
+    st.markdown("### 3️⃣ Visual Model Evaluation")
+    from sklearn.tree import DecisionTreeClassifier, plot_tree
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
+    from sklearn.model_selection import cross_val_score
+    from sklearn.metrics import precision_score
+    
+    # Model selection
+    selected_model = st.selectbox(
+        "Select a classification model to evaluate:", 
+        ["Decision Tree", "Random Forest", "Logistic Regression"]
+    )
+
+    if selected_model == "Decision Tree":
+        st.markdown("#### Decision Tree Classifier")
+        
+        # Slider for max_depth
+        max_depth = st.slider("Select max_depth:", 1, 20, 3, key="dt_depth")
+        
+        # Create and fit model
+        model = DecisionTreeClassifier(max_depth=max_depth, random_state=42)
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        
+        # Metrics in columns
+        col1, col2 = st.columns(2)
+        with col1:
+            accuracy = accuracy_score(y_test, y_pred)
+            st.markdown(f"**Accuracy:** {accuracy:.4f}")
+        with col2:
+            precision = precision_score(y_test, y_pred)
+            st.markdown(f"**Precision:** {precision:.4f}")
+        
+        # Cross-validated accuracy
+        cv_scores = cross_val_score(model, X, y, cv=5)
+        st.markdown(f"**Mean CV Accuracy:** {cv_scores.mean():.4f}")
+        
+        # Classification Report
+        st.markdown("#### 📊 Classification Report")
+        report = classification_report(y_test, y_pred, target_names=["Customer", "Subscriber"], output_dict=True)
+        st.dataframe(pd.DataFrame(report).transpose())
+        
+        # Decision Tree Diagram
+        st.markdown("#### Decision Tree Diagram")
+        fig_tree, ax_tree = plt.subplots(figsize=(20, 10))
+        plot_tree(model, feature_names=X.columns, class_names=["Customer", "Subscriber"], filled=True, ax=ax_tree)
+        st.pyplot(fig_tree)
+        
+    elif selected_model == "Random Forest":
+        st.markdown("#### Random Forest Classifier")
+        
+        # Parameters
+        n_estimators = st.slider("Number of trees:", 10, 200, 100, key="rf_estimators")
+        max_depth = st.slider("Max depth:", 1, 20, 5, key="rf_depth")
+        
+        # Single model creation and fitting
+        model = RandomForestClassifier(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            random_state=42
+        )
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        
+        # Metrics
+        col1, col2 = st.columns(2)
+        with col1:
+            accuracy = accuracy_score(y_test, y_pred)
+            st.markdown(f"**Accuracy:** {accuracy:.4f}")
+        with col2:
+            precision = precision_score(y_test, y_pred)
+            st.markdown(f"**Precision:** {precision:.4f}")
+        
+        # Classification Report
+        st.markdown("#### 📊 Classification Report")
+        report = classification_report(y_test, y_pred, target_names=["Customer", "Subscriber"], output_dict=True)
+        st.dataframe(pd.DataFrame(report).transpose())
+        
+        # Single Feature Importance plot
+        st.markdown("#### 🔍 Feature Importances")
+        importances = model.feature_importances_
+        feature_df = pd.DataFrame({'Feature': X.columns, 'Importance': importances}).sort_values('Importance', ascending=False)
+        fig, ax = plt.subplots()
+        sns.barplot(data=feature_df, x='Importance', y='Feature', ax=ax)
+        st.pyplot(fig)
+        
+    elif selected_model == "Logistic Regression":
+        st.markdown("#### Logistic Regression")
+        
+        # Single model creation and fitting
+        model = LogisticRegression()
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        
+        # Metrics
+        col1, col2 = st.columns(2)
+        with col1:
+            accuracy = accuracy_score(y_test, y_pred)
+            st.markdown(f"**Accuracy:** {accuracy:.4f}")
+        with col2:
+            precision = precision_score(y_test, y_pred)
+            st.markdown(f"**Precision:** {precision:.4f}")
+        
+        # Classification Report
+        st.markdown("#### 📊 Classification Report")
+        report = classification_report(y_test, y_pred, target_names=["Customer", "Subscriber"], output_dict=True)
+        st.dataframe(pd.DataFrame(report).transpose())
+        
+        # Single Confusion Matrix
+        st.markdown("#### Confusion Matrix")
+        cm = confusion_matrix(y_test, y_pred)
+        fig, ax = plt.subplots()
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Customer", "Subscriber"])
+        disp.plot(ax=ax)
+        st.pyplot(fig)
+
+##Page 4
+elif page == "Model Tuning":
+
+    st.subheader("04 Model Tuning & Experiment Tracking")
+     # Setup MLflow
+    setup_mlflow()
+    
+    # Create tabs for different functionalities
+    tab1, tab2, tab3 = st.tabs(["🔧 Manual Grid Search", "📊 Browse MLflow Runs", "📈 MLflow Dashboard"])
+    
+    with tab1:
+        st.markdown("#### Manual Grid Search of Decision Tree")
+        
+        # Prepare data (same as your existing code)
+        df = final_df.copy()
+        df = df[df['gender'].isin([1, 2])]
+        df['age'] = 2020 - df['birth year']
+        df = df[(df['age'] > 10) & (df['age'] < 90)]
+        df = df.dropna(subset=['tripduration'])
+        df['usertype_encoded'] = LabelEncoder().fit_transform(df['usertype'])
+        
+        X = df[['age', 'gender', 'tripduration']]
+        y = df['usertype_encoded']
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        # Hyperparameter selection
+        max_depth = st.selectbox("Choose max_depth", [3, 5, 10, None])
+        
+        if st.button("🚀 Train & Log to MLflow"):
+            with st.spinner("Training model and logging to MLflow..."):
+                try:
+                    # Start MLflow run
+                    with mlflow.start_run(run_name=f"DecisionTree_depth_{max_depth}"):
+                        # Train model
+                        model = DecisionTreeClassifier(max_depth=max_depth, random_state=42)
+                        model.fit(X_train, y_train)
+                        y_pred = model.predict(X_test)
+                        
+                        # Calculate metrics
+                        accuracy = accuracy_score(y_test, y_pred)
+                        precision = precision_score(y_test, y_pred)
+                        from sklearn.metrics import recall_score, f1_score, mean_squared_error
+                        recall = recall_score(y_test, y_pred)
+                        f1 = f1_score(y_test, y_pred)
+                        
+                        # For regression-like metrics (as shown in your dashboard)
+                        y_pred_proba = model.predict_proba(X_test)[:, 1]  # probabilities
+                        rmse = np.sqrt(mean_squared_error(y_test, y_pred_proba))  # Manual square root
+                        mae = mean_absolute_error(y_test, y_pred_proba)
+                        r2 = r2_score(y_test, y_pred_proba)
+                        
+                        # Log parameters
+                        mlflow.log_param("max_depth", max_depth)
+                        mlflow.log_param("random_state", 42)
+                        mlflow.log_param("model_type", "DecisionTree")
+                        
+                        # Log metrics
+                        mlflow.log_metric("accuracy", accuracy)
+                        mlflow.log_metric("precision", precision)
+                        mlflow.log_metric("recall", recall)
+                        mlflow.log_metric("f1_score", f1)
+                        mlflow.log_metric("rmse", rmse)
+                        mlflow.log_metric("mae", mae)
+                        mlflow.log_metric("r2", r2)
+                        
+                        # Log dataset info
+                        mlflow.log_param("train_samples", len(X_train))
+                        mlflow.log_param("test_samples", len(X_test))
+                        mlflow.log_param("features", str(list(X.columns)))
+                        
+                        # Note: Model logging not supported by DagsHub
+                        # mlflow.sklearn.log_model(model, "decision_tree_model")
+                        
+                        st.success("✅ Model trained and logged to MLflow!")
+                        st.markdown(f"**Accuracy:** {accuracy:.4f}")
+                        st.markdown(f"**RMSE:** {rmse:.4f}")
+                        st.markdown(f"**MAE:** {mae:.4f}")
+                        st.markdown(f"**R²:** {r2:.4f}")
+                        
+                        st.info("💡 **Note:** DagsHub MLflow tracks parameters and metrics. Model artifacts are not supported.")
+                
+                except Exception as e:
+                    st.error(f"❌ Error during training/logging: {str(e)}")
+                    st.markdown("**Troubleshooting:**")
+                    st.markdown("- Check your MLflow connection")
+                    st.markdown("- Verify your DagsHub credentials")
+                    st.markdown("- Some MLflow features may not be supported by DagsHub")
+    
+    with tab2:
+        st.markdown("#### Browse Logged Experiments")
+        
+        try:
+            # Get MLflow client
+            client = MlflowClient()
+            
+            # Get experiment
+            experiment = mlflow.get_experiment_by_name("citibike-user-prediction")
+            if experiment:
+                # Get all runs
+                runs = client.search_runs(
+                    experiment_ids=[experiment.experiment_id],
+                    order_by=["start_time DESC"],
+                    max_results=20
+                )
+                
+                if runs:
+                    # Create dataframe of runs
+                    runs_data = []
+                    for run in runs:
+                        run_data = {
+                            'run_id': run.info.run_id[:20] + '...',  # Truncate for display
+                            'max_depth': run.data.params.get('max_depth', 'N/A'),
+                            'rmse': float(run.data.metrics.get('rmse', 0)),
+                            'mae': float(run.data.metrics.get('mae', 0)),
+                            'r2': float(run.data.metrics.get('r2', 0)),
+                            'accuracy': float(run.data.metrics.get('accuracy', 0)),
+                            'start_time': run.info.start_time
+                        }
+                        runs_data.append(run_data)
+                    
+                    runs_df = pd.DataFrame(runs_data)
+                    st.dataframe(runs_df, use_container_width=True)
+                    
+                    # Best model visualization
+                    if len(runs_df) > 0:
+                        best_run = runs_df.loc[runs_df['accuracy'].idxmax()]
+                        st.markdown("#### 🏆 Best Performing Run")
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Best Accuracy", f"{best_run['accuracy']:.4f}")
+                        with col2:
+                            st.metric("RMSE", f"{best_run['rmse']:.4f}")
+                        with col3:
+                            st.metric("MAE", f"{best_run['mae']:.4f}")
+                        with col4:
+                            st.metric("R²", f"{best_run['r2']:.4f}")
+                else:
+                    st.info("No runs found. Train some models first!")
+            else:
+                st.warning("Experiment not found. Train a model first to create the experiment.")
+                
+        except Exception as e:
+            st.error(f"Error connecting to MLflow: {str(e)}")
+            st.info("Make sure you have the correct MLflow tracking URI and credentials set up.")
+    
+    with tab3:
+        st.markdown("#### 📈 DagsHub MLflow Dashboard")
+        st.markdown("""
+        Below is the live DagsHub MLflow UI for the **citibike-analysis** repo. 
+        You can switch between experiments, look at parameter/metrics charts, and dig into individual runs.
+        """)
+        
+        # Create button to open MLflow UI
+        dagshub_url = "https://dagshub.com/theespacecoast/citibike-analysis"
+        mlflow_url = f"{dagshub_url}.mlflow"
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"""
+            **🔗 Quick Links:**
+            - [View MLflow Experiment]({mlflow_url})
+            - [DagsHub Repository]({dagshub_url})
+            """)
+        
+        with col2:
+            if st.button("🚀 View MLflow Experiment"):
+                st.markdown(f"[Open MLflow Dashboard]({mlflow_url})")
+        
+        # Embed MLflow UI (if possible)
+        st.markdown("---")
+        st.markdown("💡 **Tip:** Open the MLflow dashboard in a new tab to see your experiments live!")
 
 
+elif page == "Explainability":
+    import shap
+    from sklearn.inspection import PartialDependenceDisplay
+    from sklearn.ensemble import RandomForestClassifier
 
+    df = final_df.copy()
+    df = df[df['gender'].isin([1, 2])]
+    df['age'] = 2020 - df['birth year']
+    df = df[(df['age'] > 15) & (df['age'] < 90)]
+    df = df.dropna(subset=['tripduration'])
+    df['usertype_encoded'] = LabelEncoder().fit_transform(df['usertype'])
 
+    X = df[['age', 'gender', 'tripduration']]
+    y = df['usertype_encoded']
+    X_sample = X.sample(n=min(1000, len(X)), random_state=42)
+    y_sample = y[X_sample.index]
+    
+    # Train model
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X, y)
+
+    # Create SHAP explainer
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X)
+
+    # For binary classification, use class 1 (positive class)
+    if len(shap_values) == 2:
+        shap_values_plot = shap_values[1]
+    else:
+        shap_values_plot = shap_values
+
+    # 1. Traditional Feature Importance
+    st.markdown("### 📊 Traditional Feature Importance")
+    importance = pd.DataFrame({
+        'Feature': X.columns,
+        'Importance': model.feature_importances_
+    }).sort_values('Importance', ascending=False)
+
+    fig1, ax1 = plt.subplots(figsize=(10, 6))
+    sns.barplot(data=importance, x='Importance', y='Feature', ax=ax1)
+    ax1.set_title('Random Forest Feature Importance')
+    st.pyplot(fig1)
+
+    # 2. SHAP Feature Importance Bar Plot
+    st.markdown("### 🎯 SHAP Feature Importance")
+    fig2, ax2 = plt.subplots(figsize=(10, 6))
+    shap.plots.bar(shap_values_plot, max_display=len(X.columns), show=False)
+    plt.title('SHAP Feature Importance')
+    st.pyplot(fig2)
+
+    # 3. SHAP Beeswarm Plot
+    st.markdown("### 🐝 SHAP Beeswarm Plot")
+    st.write("This plot shows the impact of each feature on model predictions. Each dot represents one prediction.")
+    fig3, ax3 = plt.subplots(figsize=(10, 6))
+    shap.plots.beeswarm(shap_values_plot, max_display=len(X.columns), show=False)
+    plt.title('SHAP Beeswarm Plot - Feature Impact Distribution')
+    st.pyplot(fig3)
+
+    # 4. SHAP Waterfall Plot for Individual Predictions
+    st.markdown("### 🌊 SHAP Waterfall Plot")
+    st.write("Shows how each feature contributes to a specific prediction")
+
+    # Let user select an instance or use a random one
+    col1, col2 = st.columns(2)
+    with col1:
+        instance_idx = st.selectbox(
+            "Select instance to explain:",
+            options=range(min(20, len(X))),  # Show first 20 instances
+            index=0
+        )
+
+    with col2:
+        if st.button("🎲 Random Instance"):
+            instance_idx = np.random.randint(0, len(X))
+
+    # Create waterfall plot
+    fig4, ax4 = plt.subplots(figsize=(12, 8))
+    shap.plots.waterfall(
+        explainer.expected_value[1] if len(shap_values) == 2 else explainer.expected_value,
+        shap_values_plot[instance_idx],
+        X.iloc[instance_idx],
+        max_display=len(X.columns),
+        show=False
+    )
+    plt.title(f'SHAP Waterfall Plot - Instance {instance_idx}')
+    st.pyplot(fig4)
+
+    # 5. SHAP Summary Statistics
+    st.markdown("### 📈 SHAP Summary Statistics")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.metric(
+            "Most Important Feature",
+            X.columns[np.argmax(np.abs(shap_values_plot).mean(0))]
+        )
+
+    with col2:
+        st.metric(
+            "Average |SHAP| Value",
+            f"{np.abs(shap_values_plot).mean():.4f}"
+        )
+
+    # 6. Partial Dependence Plots (keeping your original)
+    st.markdown("### 📉 How Features Affect Predictions")
+    fig5, ax5 = plt.subplots(1, 2, figsize=(15, 5))
+    PartialDependenceDisplay.from_estimator(model, X, ['age'], ax=ax5[0])
+    PartialDependenceDisplay.from_estimator(model, X, ['tripduration'], ax=ax5[1])
+    st.pyplot(fig5)
+
+    # 7. SHAP Decision Plot (Advanced)
+    st.markdown("### 🔄 SHAP Decision Plot")
+    st.write("Shows the decision path for multiple predictions")
+    fig6, ax6 = plt.subplots(figsize=(12, 8))
+    # Show decision plot for first 10 instances
+    shap.decision_plot(
+        explainer.expected_value[1] if len(shap_values) == 2 else explainer.expected_value,
+        shap_values_plot[:10],
+        X.iloc[:10],
+        show=False
+    )
+    plt.title('SHAP Decision Plot - First 10 Instances')
+    st.pyplot(fig6)
