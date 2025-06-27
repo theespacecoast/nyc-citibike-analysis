@@ -11,6 +11,9 @@ import mlflow
 import mlflow.sklearn
 from mlflow.tracking import MlflowClient
 from sklearn.preprocessing import LabelEncoder
+import shap
+from sklearn.inspection import PartialDependenceDisplay
+from sklearn.ensemble import RandomForestClassifier
 
 
 from sklearn.linear_model import LinearRegression, LogisticRegression
@@ -24,7 +27,7 @@ from sklearn.ensemble import RandomForestClassifier
 
 ##setup
 st.sidebar.title("Citi Bike Dashboard 🚲")
-page = st.sidebar.selectbox("Select Page", ["Introduction", "Visualization", "Model Prediction", "Model Tuning"])  
+page = st.sidebar.selectbox("Select Page", ["Introduction", "Visualization", "Model Prediction", "Model Tuning", "Explainability"])  
 image_citibike = Image.open('images/citibike.png')
 st.image(image_citibike, width=300)
 
@@ -634,127 +637,164 @@ elif page == "Model Tuning":
         st.markdown("---")
         st.markdown("💡 **Tip:** Open the MLflow dashboard in a new tab to see your experiments live!")
 
+elif page == "Explainability":
+    st.subheader("🔍 Model Explainability")
 
-# elif page == "Explainability":
-#     import shap
-#     from sklearn.inspection import PartialDependenceDisplay
-#     from sklearn.ensemble import RandomForestClassifier
+    # Data preparation with memory optimization
+    @st.cache_data
+    def prepare_explainability_data():
+        """Prepare data for explainability with memory optimization"""
+        df = final_df.copy()
+        df = df[df['gender'].isin([1, 2])]
+        df['age'] = 2020 - df['birth year']
+        df = df[(df['age'] > 15) & (df['age'] < 90)]
+        df = df.dropna(subset=['tripduration'])
+        df['usertype_encoded'] = LabelEncoder().fit_transform(df['usertype'])
+        
+        X = df[['age', 'gender', 'tripduration']]
+        y = df['usertype_encoded']
+        
+        # CRITICAL: Reduce sample size for SHAP to prevent memory issues
+        sample_size = min(500, len(X))  # Use max 500 samples
+        sample_indices = np.random.choice(len(X), sample_size, replace=False)
+        X_sample = X.iloc[sample_indices]
+        y_sample = y.iloc[sample_indices]
+        
+        return X, y, X_sample, y_sample
 
-#     df = final_df.copy()
-#     df = df[df['gender'].isin([1, 2])]
-#     df['age'] = 2020 - df['birth year']
-#     df = df[(df['age'] > 15) & (df['age'] < 90)]
-#     df = df.dropna(subset=['tripduration'])
-#     df['usertype_encoded'] = LabelEncoder().fit_transform(df['usertype'])
+    # IMPORTANT: This must be executed first
+    X, y, X_sample, y_sample = prepare_explainability_data()
 
-#     X = df[['age', 'gender', 'tripduration']]
-#     y = df['usertype_encoded']
-#     X_sample = X.sample(n=min(1000, len(X)), random_state=42)
-#     y_sample = y[X_sample.index]
-    
-#     # Train model
-#     model = RandomForestClassifier(n_estimators=100, random_state=42)
-#     model.fit(X, y)
+    # Model training (cached) - MUST come before SHAP computation
+    @st.cache_resource
+    def train_model_for_explainability(_X, _y):
+        """Train model with caching"""
+        model = RandomForestClassifier(
+            n_estimators=50,  # Reduced from 100 to save memory
+            max_depth=10,     # Limit depth to prevent overfitting and save memory
+            random_state=42
+        )
+        model.fit(_X, _y)
+        return model
 
-#     # Create SHAP explainer
-#     explainer = shap.TreeExplainer(model)
-#     shap_values = explainer.shap_values(X)
+    # IMPORTANT: Train the model before using it in SHAP
+    model = train_model_for_explainability(X, y)
 
-#     # For binary classification, use class 1 (positive class)
-#     if len(shap_values) == 2:
-#         shap_values_plot = shap_values[1]
-#     else:
-#         shap_values_plot = shap_values
+    # SHAP computation (cached and memory-optimized)
+    @st.cache_data
+    def compute_shap_values(_model, X_sample):
+        """Compute SHAP values with memory optimization"""
+        # Use smaller background sample for TreeExplainer
+        background_sample = X_sample.sample(n=min(100, len(X_sample)), random_state=42)
+        
+        # Create explainer with smaller background
+        explainer = shap.TreeExplainer(_model, background_sample)
+        
+        # NEW: Use the modern explainer interface that returns Explanation objects
+        shap_explanation = explainer(X_sample)
+        
+        # For binary classification, we need to select the positive class
+        if len(shap_explanation.values.shape) == 3:  # Multi-class output
+            # Select class 1 (positive class) for binary classification
+            shap_values_plot = shap.Explanation(
+                values=shap_explanation.values[:, :, 1],  # Class 1 values
+                base_values=shap_explanation.base_values[:, 1],  # Class 1 base values
+                data=shap_explanation.data,
+                feature_names=shap_explanation.feature_names
+            )
+            expected_value = explainer.expected_value[1]
+        else:
+            # Single output (regression or binary with single output)
+            shap_values_plot = shap_explanation
+            expected_value = explainer.expected_value
+            
+        return shap_values_plot, expected_value, explainer
 
-#     # 1. Traditional Feature Importance
-#     st.markdown("### 📊 Traditional Feature Importance")
-#     importance = pd.DataFrame({
-#         'Feature': X.columns,
-#         'Importance': model.feature_importances_
-#     }).sort_values('Importance', ascending=False)
+    # Show progress
+    with st.spinner('🔄 Computing SHAP values (this may take a moment)...'):
+        shap_values_plot, expected_value, explainer = compute_shap_values(model, X_sample)
 
-#     fig1, ax1 = plt.subplots(figsize=(10, 6))
-#     sns.barplot(data=importance, x='Importance', y='Feature', ax=ax1)
-#     ax1.set_title('Random Forest Feature Importance')
-#     st.pyplot(fig1)
+    st.success(f"✅ SHAP analysis completed using {len(X_sample)} samples")
 
-#     # 2. SHAP Feature Importance Bar Plot
-#     st.markdown("### 🎯 SHAP Feature Importance")
-#     fig2, ax2 = plt.subplots(figsize=(10, 6))
-#     shap.plots.bar(shap_values_plot, max_display=len(X.columns), show=False)
-#     plt.title('SHAP Feature Importance')
-#     st.pyplot(fig2)
+    # 1. Traditional Feature Importance
+    st.markdown("### 📊 Traditional Feature Importance")
+    importance = pd.DataFrame({
+        'Feature': X.columns,
+        'Importance': model.feature_importances_
+    }).sort_values('Importance', ascending=False)
 
-#     # 3. SHAP Beeswarm Plot
-#     st.markdown("### 🐝 SHAP Beeswarm Plot")
-#     st.write("This plot shows the impact of each feature on model predictions. Each dot represents one prediction.")
-#     fig3, ax3 = plt.subplots(figsize=(10, 6))
-#     shap.plots.beeswarm(shap_values_plot, max_display=len(X.columns), show=False)
-#     plt.title('SHAP Beeswarm Plot - Feature Impact Distribution')
-#     st.pyplot(fig3)
+    fig1, ax1 = plt.subplots(figsize=(10, 6))
+    sns.barplot(data=importance, x='Importance', y='Feature', ax=ax1)
+    ax1.set_title('Random Forest Feature Importance')
+    st.pyplot(fig1)
+    plt.close(fig1)
 
-#     # 4. SHAP Waterfall Plot for Individual Predictions
-#     st.markdown("### 🌊 SHAP Waterfall Plot")
-#     st.write("Shows how each feature contributes to a specific prediction")
+    # 2. SHAP Feature Importance Bar Plot
+    st.markdown("### 🎯 SHAP Feature Importance")
+    fig2, ax2 = plt.subplots(figsize=(10, 6))
+    shap.plots.bar(shap_values_plot, max_display=len(X.columns), show=False)
+    plt.title('SHAP Feature Importance')
+    st.pyplot(fig2)
+    plt.close(fig2)
 
-#     # Let user select an instance or use a random one
-#     col1, col2 = st.columns(2)
-#     with col1:
-#         instance_idx = st.selectbox(
-#             "Select instance to explain:",
-#             options=range(min(20, len(X))),  # Show first 20 instances
-#             index=0
-#         )
+    # 3. SHAP Beeswarm Plot
+    st.markdown("### 🐝 SHAP Beeswarm Plot")
+    st.write("This plot shows the impact of each feature on model predictions. Each dot represents one prediction.")
+    fig3, ax3 = plt.subplots(figsize=(10, 6))
+    shap.plots.beeswarm(shap_values_plot, max_display=len(X.columns), show=False)
+    plt.title('SHAP Beeswarm Plot - Feature Impact Distribution')
+    st.pyplot(fig3)
+    plt.close(fig3)
 
-#     with col2:
-#         if st.button("🎲 Random Instance"):
-#             instance_idx = np.random.randint(0, len(X))
+    # 4. SHAP Waterfall Plot for Individual Predictions
+    st.markdown("### 🌊 SHAP Waterfall Plot")
+    st.write("Shows how each feature contributes to a specific prediction")
 
-#     # Create waterfall plot
-#     fig4, ax4 = plt.subplots(figsize=(12, 8))
-#     shap.plots.waterfall(
-#         explainer.expected_value[1] if len(shap_values) == 2 else explainer.expected_value,
-#         shap_values_plot[instance_idx],
-#         X.iloc[instance_idx],
-#         max_display=len(X.columns),
-#         show=False
-#     )
-#     plt.title(f'SHAP Waterfall Plot - Instance {instance_idx}')
-#     st.pyplot(fig4)
+    # Let user select an instance or use a random one
+    col1, col2 = st.columns(2)
+    with col1:
+        instance_idx = st.selectbox(
+            "Select instance to explain:",
+            options=range(min(20, len(X_sample))),  # Show first 20 instances
+            index=0
+        )
 
-#     # 5. SHAP Summary Statistics
-#     st.markdown("### 📈 SHAP Summary Statistics")
-#     col1, col2 = st.columns(2)
+    with col2:
+        if st.button("🎲 Random Instance"):
+            instance_idx = np.random.randint(0, len(X_sample))
 
-#     with col1:
-#         st.metric(
-#             "Most Important Feature",
-#             X.columns[np.argmax(np.abs(shap_values_plot).mean(0))]
-#         )
+    # Create waterfall plot
+    fig4, ax4 = plt.subplots(figsize=(12, 8))
+    shap.plots.waterfall(shap_values_plot[instance_idx], max_display=len(X.columns), show=False)
+    plt.title(f'SHAP Waterfall Plot - Instance {instance_idx}')
+    st.pyplot(fig4)
+    plt.close(fig4)
 
-#     with col2:
-#         st.metric(
-#             "Average |SHAP| Value",
-#             f"{np.abs(shap_values_plot).mean():.4f}"
-#         )
+    # 5. SHAP Summary Statistics
+    st.markdown("### 📈 SHAP Summary Statistics")
+    col1, col2, col3 = st.columns(3)
 
-#     # 6. Partial Dependence Plots (keeping your original)
-#     st.markdown("### 📉 How Features Affect Predictions")
-#     fig5, ax5 = plt.subplots(1, 2, figsize=(15, 5))
-#     PartialDependenceDisplay.from_estimator(model, X, ['age'], ax=ax5[0])
-#     PartialDependenceDisplay.from_estimator(model, X, ['tripduration'], ax=ax5[1])
-#     st.pyplot(fig5)
+    with col1:
+        st.metric(
+            "Most Important Feature",
+            X.columns[np.argmax(np.abs(shap_values_plot.values).mean(0))]
+        )
 
-#     # 7. SHAP Decision Plot (Advanced)
-#     st.markdown("### 🔄 SHAP Decision Plot")
-#     st.write("Shows the decision path for multiple predictions")
-#     fig6, ax6 = plt.subplots(figsize=(12, 8))
-#     # Show decision plot for first 10 instances
-#     shap.decision_plot(
-#         explainer.expected_value[1] if len(shap_values) == 2 else explainer.expected_value,
-#         shap_values_plot[:10],
-#         X.iloc[:10],
-#         show=False
-#     )
-#     plt.title('SHAP Decision Plot - First 10 Instances')
-#     st.pyplot(fig6)
+    with col2:
+        st.metric(
+            "Average |SHAP| Value",
+            f"{np.abs(shap_values_plot.values).mean():.4f}"
+        )
+        
+    with col3:
+        st.metric(
+            "Sample Size Used",
+            f"{len(X_sample):,}"
+        )
+
+    # 6. Partial Dependence Plots
+    st.markdown("### 📉 How Features Affect Predictions")
+    fig5, ax5 = plt.subplots(1, 2, figsize=(15, 5))
+    PartialDependenceDisplay.from_estimator(model, X_sample, ['age'], ax=ax5[0])
+    PartialDependenceDisplay.from_estimator(model, X_sample, ['tripduration'], ax=ax5[1])
+    st.pyplot(fig5)

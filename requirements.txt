@@ -5,3 +5,8 @@ matplotlib
 seaborn 
 scikit-learn
 mlflow
+altair
+dagshub
+ydata-profiling
+xgboost
+shap
