@@ -635,126 +635,126 @@ elif page == "Model Tuning":
         st.markdown("💡 **Tip:** Open the MLflow dashboard in a new tab to see your experiments live!")
 
 
-elif page == "Explainability":
-    import shap
-    from sklearn.inspection import PartialDependenceDisplay
-    from sklearn.ensemble import RandomForestClassifier
+# elif page == "Explainability":
+#     import shap
+#     from sklearn.inspection import PartialDependenceDisplay
+#     from sklearn.ensemble import RandomForestClassifier
 
-    df = final_df.copy()
-    df = df[df['gender'].isin([1, 2])]
-    df['age'] = 2020 - df['birth year']
-    df = df[(df['age'] > 15) & (df['age'] < 90)]
-    df = df.dropna(subset=['tripduration'])
-    df['usertype_encoded'] = LabelEncoder().fit_transform(df['usertype'])
+#     df = final_df.copy()
+#     df = df[df['gender'].isin([1, 2])]
+#     df['age'] = 2020 - df['birth year']
+#     df = df[(df['age'] > 15) & (df['age'] < 90)]
+#     df = df.dropna(subset=['tripduration'])
+#     df['usertype_encoded'] = LabelEncoder().fit_transform(df['usertype'])
 
-    X = df[['age', 'gender', 'tripduration']]
-    y = df['usertype_encoded']
-    X_sample = X.sample(n=min(1000, len(X)), random_state=42)
-    y_sample = y[X_sample.index]
+#     X = df[['age', 'gender', 'tripduration']]
+#     y = df['usertype_encoded']
+#     X_sample = X.sample(n=min(1000, len(X)), random_state=42)
+#     y_sample = y[X_sample.index]
     
-    # Train model
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X, y)
+#     # Train model
+#     model = RandomForestClassifier(n_estimators=100, random_state=42)
+#     model.fit(X, y)
 
-    # Create SHAP explainer
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X)
+#     # Create SHAP explainer
+#     explainer = shap.TreeExplainer(model)
+#     shap_values = explainer.shap_values(X)
 
-    # For binary classification, use class 1 (positive class)
-    if len(shap_values) == 2:
-        shap_values_plot = shap_values[1]
-    else:
-        shap_values_plot = shap_values
+#     # For binary classification, use class 1 (positive class)
+#     if len(shap_values) == 2:
+#         shap_values_plot = shap_values[1]
+#     else:
+#         shap_values_plot = shap_values
 
-    # 1. Traditional Feature Importance
-    st.markdown("### 📊 Traditional Feature Importance")
-    importance = pd.DataFrame({
-        'Feature': X.columns,
-        'Importance': model.feature_importances_
-    }).sort_values('Importance', ascending=False)
+#     # 1. Traditional Feature Importance
+#     st.markdown("### 📊 Traditional Feature Importance")
+#     importance = pd.DataFrame({
+#         'Feature': X.columns,
+#         'Importance': model.feature_importances_
+#     }).sort_values('Importance', ascending=False)
 
-    fig1, ax1 = plt.subplots(figsize=(10, 6))
-    sns.barplot(data=importance, x='Importance', y='Feature', ax=ax1)
-    ax1.set_title('Random Forest Feature Importance')
-    st.pyplot(fig1)
+#     fig1, ax1 = plt.subplots(figsize=(10, 6))
+#     sns.barplot(data=importance, x='Importance', y='Feature', ax=ax1)
+#     ax1.set_title('Random Forest Feature Importance')
+#     st.pyplot(fig1)
 
-    # 2. SHAP Feature Importance Bar Plot
-    st.markdown("### 🎯 SHAP Feature Importance")
-    fig2, ax2 = plt.subplots(figsize=(10, 6))
-    shap.plots.bar(shap_values_plot, max_display=len(X.columns), show=False)
-    plt.title('SHAP Feature Importance')
-    st.pyplot(fig2)
+#     # 2. SHAP Feature Importance Bar Plot
+#     st.markdown("### 🎯 SHAP Feature Importance")
+#     fig2, ax2 = plt.subplots(figsize=(10, 6))
+#     shap.plots.bar(shap_values_plot, max_display=len(X.columns), show=False)
+#     plt.title('SHAP Feature Importance')
+#     st.pyplot(fig2)
 
-    # 3. SHAP Beeswarm Plot
-    st.markdown("### 🐝 SHAP Beeswarm Plot")
-    st.write("This plot shows the impact of each feature on model predictions. Each dot represents one prediction.")
-    fig3, ax3 = plt.subplots(figsize=(10, 6))
-    shap.plots.beeswarm(shap_values_plot, max_display=len(X.columns), show=False)
-    plt.title('SHAP Beeswarm Plot - Feature Impact Distribution')
-    st.pyplot(fig3)
+#     # 3. SHAP Beeswarm Plot
+#     st.markdown("### 🐝 SHAP Beeswarm Plot")
+#     st.write("This plot shows the impact of each feature on model predictions. Each dot represents one prediction.")
+#     fig3, ax3 = plt.subplots(figsize=(10, 6))
+#     shap.plots.beeswarm(shap_values_plot, max_display=len(X.columns), show=False)
+#     plt.title('SHAP Beeswarm Plot - Feature Impact Distribution')
+#     st.pyplot(fig3)
 
-    # 4. SHAP Waterfall Plot for Individual Predictions
-    st.markdown("### 🌊 SHAP Waterfall Plot")
-    st.write("Shows how each feature contributes to a specific prediction")
+#     # 4. SHAP Waterfall Plot for Individual Predictions
+#     st.markdown("### 🌊 SHAP Waterfall Plot")
+#     st.write("Shows how each feature contributes to a specific prediction")
 
-    # Let user select an instance or use a random one
-    col1, col2 = st.columns(2)
-    with col1:
-        instance_idx = st.selectbox(
-            "Select instance to explain:",
-            options=range(min(20, len(X))),  # Show first 20 instances
-            index=0
-        )
+#     # Let user select an instance or use a random one
+#     col1, col2 = st.columns(2)
+#     with col1:
+#         instance_idx = st.selectbox(
+#             "Select instance to explain:",
+#             options=range(min(20, len(X))),  # Show first 20 instances
+#             index=0
+#         )
 
-    with col2:
-        if st.button("🎲 Random Instance"):
-            instance_idx = np.random.randint(0, len(X))
+#     with col2:
+#         if st.button("🎲 Random Instance"):
+#             instance_idx = np.random.randint(0, len(X))
 
-    # Create waterfall plot
-    fig4, ax4 = plt.subplots(figsize=(12, 8))
-    shap.plots.waterfall(
-        explainer.expected_value[1] if len(shap_values) == 2 else explainer.expected_value,
-        shap_values_plot[instance_idx],
-        X.iloc[instance_idx],
-        max_display=len(X.columns),
-        show=False
-    )
-    plt.title(f'SHAP Waterfall Plot - Instance {instance_idx}')
-    st.pyplot(fig4)
+#     # Create waterfall plot
+#     fig4, ax4 = plt.subplots(figsize=(12, 8))
+#     shap.plots.waterfall(
+#         explainer.expected_value[1] if len(shap_values) == 2 else explainer.expected_value,
+#         shap_values_plot[instance_idx],
+#         X.iloc[instance_idx],
+#         max_display=len(X.columns),
+#         show=False
+#     )
+#     plt.title(f'SHAP Waterfall Plot - Instance {instance_idx}')
+#     st.pyplot(fig4)
 
-    # 5. SHAP Summary Statistics
-    st.markdown("### 📈 SHAP Summary Statistics")
-    col1, col2 = st.columns(2)
+#     # 5. SHAP Summary Statistics
+#     st.markdown("### 📈 SHAP Summary Statistics")
+#     col1, col2 = st.columns(2)
 
-    with col1:
-        st.metric(
-            "Most Important Feature",
-            X.columns[np.argmax(np.abs(shap_values_plot).mean(0))]
-        )
+#     with col1:
+#         st.metric(
+#             "Most Important Feature",
+#             X.columns[np.argmax(np.abs(shap_values_plot).mean(0))]
+#         )
 
-    with col2:
-        st.metric(
-            "Average |SHAP| Value",
-            f"{np.abs(shap_values_plot).mean():.4f}"
-        )
+#     with col2:
+#         st.metric(
+#             "Average |SHAP| Value",
+#             f"{np.abs(shap_values_plot).mean():.4f}"
+#         )
 
-    # 6. Partial Dependence Plots (keeping your original)
-    st.markdown("### 📉 How Features Affect Predictions")
-    fig5, ax5 = plt.subplots(1, 2, figsize=(15, 5))
-    PartialDependenceDisplay.from_estimator(model, X, ['age'], ax=ax5[0])
-    PartialDependenceDisplay.from_estimator(model, X, ['tripduration'], ax=ax5[1])
-    st.pyplot(fig5)
+#     # 6. Partial Dependence Plots (keeping your original)
+#     st.markdown("### 📉 How Features Affect Predictions")
+#     fig5, ax5 = plt.subplots(1, 2, figsize=(15, 5))
+#     PartialDependenceDisplay.from_estimator(model, X, ['age'], ax=ax5[0])
+#     PartialDependenceDisplay.from_estimator(model, X, ['tripduration'], ax=ax5[1])
+#     st.pyplot(fig5)
 
-    # 7. SHAP Decision Plot (Advanced)
-    st.markdown("### 🔄 SHAP Decision Plot")
-    st.write("Shows the decision path for multiple predictions")
-    fig6, ax6 = plt.subplots(figsize=(12, 8))
-    # Show decision plot for first 10 instances
-    shap.decision_plot(
-        explainer.expected_value[1] if len(shap_values) == 2 else explainer.expected_value,
-        shap_values_plot[:10],
-        X.iloc[:10],
-        show=False
-    )
-    plt.title('SHAP Decision Plot - First 10 Instances')
-    st.pyplot(fig6)
+#     # 7. SHAP Decision Plot (Advanced)
+#     st.markdown("### 🔄 SHAP Decision Plot")
+#     st.write("Shows the decision path for multiple predictions")
+#     fig6, ax6 = plt.subplots(figsize=(12, 8))
+#     # Show decision plot for first 10 instances
+#     shap.decision_plot(
+#         explainer.expected_value[1] if len(shap_values) == 2 else explainer.expected_value,
+#         shap_values_plot[:10],
+#         X.iloc[:10],
+#         show=False
+#     )
+#     plt.title('SHAP Decision Plot - First 10 Instances')
+#     st.pyplot(fig6)
